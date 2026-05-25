@@ -173,16 +173,30 @@ my-app/
 | **App name** | Your app name (e.g., "MyApp") |
 | **User support email** | Your email |
 | **Developer contact email** | Your email |
- 
+
 4. Click **Save and Continue**
-5. On **Scopes** page → Click **"Add or Remove Scopes"**
-6. Search and select these 3 scopes:
+
+5. On **Audience** page:
+   - Select: ✅ **External**
+   - Click **Next**
+
+6. On **Contact Information** page:
+   - Verify your email
+   - Click **Next**
+
+7. On **Scopes** page → Click **"Add or Remove Scopes"**
+
+8. Search and select these 3 scopes:
    - ✅ `../auth/userinfo.email`
    - ✅ `../auth/userinfo.profile`
    - ✅ `openid`
-7. Click **Update** → **Save and Continue**
-8. On **Test Users** page (optional) → Add your email as test user
-9. Click **Save and Continue** → **Back to Dashboard**
+
+9. Click **Update** → **Save and Continue**
+
+10. On **Test Users** page:
+   - Add your email as a test user
+
+11. Click **Save and Continue** → **Back to Dashboard**
 ---
  
 ### Step 3.4 — Create OAuth 2.0 Credentials
