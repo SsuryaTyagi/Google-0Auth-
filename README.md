@@ -462,8 +462,50 @@ passport.deserializeUser(async (id, done) => {
 ```
  
 ---
+
+ ## 8. Auth.middleware · JS
  
-## 8. Authentication Routes
+```bash
+mkdir -p backend/
+touch backend/middleware/auth.middleware.js
+```
+ 
+```javascript
+// backend/middleware/auth.middleware.js
+ 
+const jwt  = require('jsonwebtoken');
+const User = require('../models/User');
+
+const protect = async (req, res, next) => {
+  const token = req.cookies?.token;
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Please login first' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user      = await User.findById(decoded.id);
+    next();
+  } catch {
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+};
+
+// Role check middleware
+const requireRole = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) {
+    return res.status(403).json({ success: false, message: 'Access denied' });
+  }
+  next();
+};
+
+module.exports = { protect, requireRole };
+```
+ 
+---
+
+## .9 Authentication Routes
  
 ```bash
 mkdir -p backend/routes
@@ -590,7 +632,7 @@ module.exports = router;
  
 ---
  
-## 9. Express Server Setup (server.js)
+## 10. Express Server Setup (server.js)
  
 ```javascript
 // backend/server.js
@@ -658,7 +700,7 @@ Add to `backend/package.json`:
  
 ---
  
-## 10. React Frontend — Login Button
+## 11. React Frontend — Login Button
  
 ```jsx
 // frontend/src/components/GoogleLoginButton.jsx
@@ -757,7 +799,7 @@ export default function Login() {
  
 ---
  
-## 11. React Auth Context
+## 12. React Auth Context
  
 ```bash
 mkdir -p frontend/src/context
@@ -874,7 +916,7 @@ export const useAuth = () => {
  
 ---
  
-## 12. Protected Route (Frontend Guard)
+## 13. Protected Route (Frontend Guard)
  
 ```jsx
 // frontend/src/components/ProtectedRoute.jsx
