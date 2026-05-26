@@ -105,19 +105,47 @@ my-app/
 │   ├── .env.example             ← Template (safe to commit)
 │   └── server.js                ← Express entry point
 │
-├── frontend/
-│   ├── src/
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx  ← Global auth state
-│   │   ├── components/
-│   │   │   ├── GoogleLoginButton.jsx
-│   │   │   └── ProtectedRoute.jsx
-│   │   ├── pages/
-│   │   │   ├── Login.jsx
-│   │   │   └── Dashboard.jsx
-│   │   └── App.jsx
-│   └── package.json
+frontend/
 │
+├── src/
+│   │
+│   ├── assets/                # images, icons, fonts
+│   │
+│   ├── features/              # feature-based architecture
+│   │   │
+│   │   ├── auth/
+│   │   │   │
+│   │   │   ├── components/    # reusable UI components (auth specific)
+│   │   │   │   ├── Button.jsx
+│   │   │   │   ├── GoogleLoginButton.jsx
+│   │   │   │   ├── Input.jsx
+│   │   │   │   ├── ProtectedRoute.jsx
+│   │   │   │
+│   │   │   ├── hooks/         # custom hooks
+│   │   │   │   └── useAuth.js
+│   │   │   │
+│   │   │   ├── pages/         # pages/screens
+│   │   │   │   ├── LoginPage.jsx
+│   │   │   │   ├── RegisterPage.jsx
+│   │   │   │
+│   │   │   ├── services/      # API calls
+│   │   │   │   └── auth.api.js
+│   │   │   │
+│   │   │   ├── context/       # context API
+│   │   │   │   └── AuthContext.jsx
+│   │   │   │
+│   │   │   ├── styles/        # auth specific styles
+│   │   │   │   └── auth.scss
+│   │   │   │
+│   │   │   └── index.js       # barrel export (optional)
+│   │
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── index.css
+│
+├── .gitignore
+├── package.json
+├── vite.config.js
 └── README.md
 ```
  
@@ -728,6 +756,73 @@ function GoogleLoginButton({ text = 'Continue with Google' }) {
 
 export default GoogleLoginButton;
 ```
+```jsx
+// frontend/src/components/Input · JSX
+ 
+import React, { useState } from 'react';
+
+// Usage:
+// <Input label="Email"    type="email"    value={email}    onChange={setEmail} />
+// <Input label="Password" type="password" value={password} onChange={setPassword} />
+function Input({ label, type = 'text', value, onChange, placeholder, required }) {
+  const [showPass, setShowPass] = useState(false);
+  const isPassword = type === 'password';
+
+  return (
+    <div className="input-group">
+      {label && <label className="input-label">{label}</label>}
+      <div className="input-wrapper">
+        <input
+          className="input-field"
+          type={isPassword ? (showPass ? 'text' : 'password') : type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder || label}
+          required={required}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            className="input-eye"
+            onClick={() => setShowPass((prev) => !prev)}
+            tabIndex={-1}
+          >
+            {showPass ? '🙈' : '👁️'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default Input;
+```
+```jsx
+// frontend/src/auth/hooks/Auth.api.JS
+ 
+const API = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+// ── Helper ────────────────────────────────────────────────────
+const request = (url, options = {}) =>
+  fetch(`${API}${url}`, {
+    headers:     { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    ...options,
+  }).then((r) => r.json());
+
+// ── APIs ──────────────────────────────────────────────────────
+export const registerAPI = (data) =>
+  request('/auth/register', { method: 'POST', body: JSON.stringify(data) });
+
+export const loginAPI = (data) =>
+  request('/auth/login', { method: 'POST', body: JSON.stringify(data) });
+
+export const getMeAPI    = ()  => request('/auth/me');
+export const logoutAPI   = ()  => request('/auth/logout', { method: 'POST' });
+
+// Google OAuth — browser redirect
+export const googleLoginURL = `${API}/auth/google`;
+```
  
 Create `frontend/src/pages/Login.jsx`:
  
@@ -828,6 +923,129 @@ export default LoginPage;
 ```
  
 ---
+Create `frontend/src/pages/Register.jsx`:
+ 
+```jsx
+// frontend/src/pages/Register.jsx
+ 
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate }  from 'react-router-dom';
+import Input             from '../component/Input';
+import Button            from '../component/Button';
+import GoogleLoginButton from '../component/GoogleLoginButton';
+import useAuth           from '../hooks/useAuth';
+import { registerAPI }   from '../services/auth.api';
+import '../Style/Style.scss';
+
+function RegisterPage() {
+  const { user, setUser } = useAuth();
+  const navigate          = useNavigate();
+
+  const [name,     setName]     = useState('');
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+
+  useEffect(() => {
+    if (user) navigate('/');
+  }, [user, navigate]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    const res = await registerAPI({ name, email, password });
+    setLoading(false);
+
+    if (res.success) {
+      setUser(res.user);
+      navigate('/');
+    } else {
+      setError(res.message || 'Registration failed');
+    }
+  };
+
+  return (
+    <div className="auth-page">
+      <div className="auth-card">
+
+        {/* Header */}
+        <div className="auth-header">
+          <div className="auth-logo">✨</div>
+          <h1 className="auth-title">Create account</h1>
+          <p className="auth-subtitle">Start your journey today</p>
+        </div>
+
+        {/* Error */}
+        {error && <div className="auth-error">{error}</div>}
+
+        {/* Register Form */}
+        <form onSubmit={handleSubmit} className="auth-form">
+          <Input
+            label="Full Name"
+            type="text"
+            value={name}
+            onChange={setName}
+            placeholder="John Doe"
+            required
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            placeholder="you@example.com"
+            required
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder="Min. 6 characters"
+            required
+          />
+
+          {/*
+            ── Extensible: Aage Phone/Address Add Karna Ho Toh ──
+            <Input label="Phone"   type="tel"  value={phone}   onChange={setPhone}   />
+            <Input label="Address" type="text" value={address} onChange={setAddress} />
+            ────────────────────────────────────────────────────
+          */}
+
+          <Button loading={loading}>Create Account</Button>
+        </form>
+
+        {/* Divider */}
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+
+        {/* Google Register */}
+        <GoogleLoginButton text="Sign up with Google" />
+
+        {/* Switch to Login */}
+        <p className="auth-switch">
+          Already have an account?{' '}
+          <Link to="/login">Sign in</Link>
+        </p>
+
+      </div>
+    </div>
+  );
+}
+
+export default RegisterPage;
+```
+ 
+---
  
 ## 12. React Auth Context
  
@@ -840,66 +1058,35 @@ touch frontend/src/context/AuthContext.jsx
 // frontend/src/context/AuthContext.jsx
  
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
- 
-const AuthContext = createContext(null);
- 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
- 
+
+export const AuthContext = createContext(null);
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
- 
-  // ── Check if user is logged in (on app load) ──────────────
+
+  // App load par check karo — login hai ya nahi
   const checkAuth = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
-        credentials: 'include',  // ← IMPORTANT: sends cookies
+      const res = await fetch(`${API_URL}/auth/me`, {
+        credentials: 'include',  // cookies hamesha bhejo
       });
- 
-      if (response.ok) {
-        const data = await response.json();
+
+      if (res.ok) {
+        const data = await res.json();
         setUser(data.user);
-      } else if (response.status === 401) {
-        // Try refreshing the token
-        await refreshToken();
       } else {
         setUser(null);
       }
-    } catch (err) {
-      console.error('Auth check failed:', err);
+    } catch {
       setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
- 
-  // ── Refresh access token ──────────────────────────────────
-  const refreshToken = async () => {
-    try {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
-        method:      'POST',
-        credentials: 'include',
-      });
- 
-      if (response.ok) {
-        // Token refreshed, try /me again
-        const meResponse = await fetch(`${API_URL}/auth/me`, {
-          credentials: 'include',
-        });
-        if (meResponse.ok) {
-          const data = await meResponse.json();
-          setUser(data.user);
-        }
-      } else {
-        setUser(null);
-      }
-    } catch (err) {
-      setUser(null);
-    }
-  };
- 
-  // ── Logout ────────────────────────────────────────────────
+
   const logout = async () => {
     try {
       await fetch(`${API_URL}/auth/logout`, {
@@ -912,35 +1099,30 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   };
- 
+
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
- 
-  const value = {
-    user,
-    loading,
-    error,
-    logout,
-    refreshToken,
-    isAuthenticated: !!user,
-    isAdmin:         user?.role === 'admin',
-  };
- 
+
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      user,
+      setUser,
+      loading,
+      logout,
+      isAuthenticated: !!user,
+      isAdmin:         user?.role === 'admin',
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
- 
-// Custom hook — use this in any component
+
+// Custom hook
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used inside <AuthProvider>');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
+  return ctx;
 };
 ```
  
@@ -986,69 +1168,40 @@ export default Protected;
  
 ---
  
-## 13. Dashboard Page (After Login)
+## 13. Home Page (After Login)
  
 ```jsx
-// frontend/src/pages/Dashboard.jsx
+// frontend/src/pages/Home.jsx
  
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
- 
-export default function Dashboard() {
-  const { user, logout, isAdmin } = useAuth();
- 
+import useAuth from './features/auth/hooks/useAuth';
+
+function Home() {
+  const { user, logout } = useAuth();
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 24px' }}>
- 
-      {/* Profile Card */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'white', padding: '24px', borderRadius: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
-        <img
-          src={user.avatar}
-          alt={user.displayName}
-          style={{ width: '72px', height: '72px', borderRadius: '50%', border: '3px solid #e8f0fe' }}
-        />
-        <div>
-          <h1 style={{ margin: '0 0 4px', fontSize: '22px' }}>
-            Welcome, {user.displayName}! 👋
-          </h1>
-          <p style={{ margin: '0 0 8px', color: '#666' }}>{user.email}</p>
-          <span style={{
-            background: isAdmin ? '#FEF3C7' : '#E8F5E9',
-            color:      isAdmin ? '#92400E' : '#2E7D32',
-            padding:    '2px 10px',
-            borderRadius: '99px',
-            fontSize:   '12px',
-            fontWeight: '600',
-          }}>
-            {user.role.toUpperCase()}
-          </span>
-        </div>
-      </div>
- 
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        {[
-          { label: 'Account Type', value: 'Google OAuth' },
-          { label: 'Role',         value: user.role },
-          { label: 'Member Since', value: new Date(user.createdAt).getFullYear() },
-        ].map((stat) => (
-          <div key={stat.label} style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', textAlign: 'center' }}>
-            <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#888' }}>{stat.label}</p>
-            <p style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
- 
-      {/* Logout Button */}
+    <div style={{ maxWidth: 480, margin: '60px auto', padding: '32px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <img
+        src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name}&background=4f46e5&color=fff`}
+        alt={user?.name}
+        style={{ width: 72, height: 72, borderRadius: '50%', marginBottom: 16 }}
+      />
+      <h2 style={{ margin: '0 0 4px' }}>Hello, {user?.name}! 👋</h2>
+      <p style={{ color: '#6b7280', margin: '0 0 24px' }}>{user?.email}</p>
       <button
         onClick={logout}
-        style={{ padding: '12px 24px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}
+        style={{
+          padding: '10px 24px', background: '#ef4444', color: '#fff',
+          border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
+        }}
       >
         Sign Out
       </button>
     </div>
   );
 }
+
+export default Home;
 ```
  
 ---
@@ -1066,57 +1219,43 @@ REACT_APP_API_URL=http://localhost:5000
  
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login     from './pages/Login';
-import Dashboard from './pages/Dashboard';
- 
-// Unauthorized page
-const Unauthorized = () => (
-  <div style={{ textAlign: 'center', padding: '60px' }}>
-    <h2>🚫 Access Denied</h2>
-    <p>You don't have permission to view this page.</p>
-    <a href="/dashboard">Go back</a>
-  </div>
-);
- 
-export default function App() {
+import { AuthProvider } from './features/auth/auth.context';
+import Protected        from './features/auth/component/Protected';
+import LoginPage        from './features/auth/pages/LoginPage';
+import RegisterPage     from './features/auth/pages/RegisterPage';
+
+// ── Home page placeholder ─────────────────────────────────────
+// Replace this with your actual home/dashboard component
+import Home from './Home';
+
+function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public routes */}
-          <Route path="/"             element={<Navigate to="/dashboard" replace />} />
-          <Route path="/login"        element={<Login />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
- 
-          {/* Protected routes — any logged-in user */}
+          {/* Public */}
+          <Route path="/login"    element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          {/* Protected — login zaroori */}
           <Route
-            path="/dashboard"
+            path="/"
             element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
+              <Protected>
+                <Home />
+              </Protected>
             }
           />
- 
-          {/* Admin-only route */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <div><h2>Admin Panel</h2></div>
-              </ProtectedRoute>
-            }
-          />
- 
+
           {/* 404 */}
-          <Route path="*" element={<div style={{ textAlign: 'center', padding: '60px' }}><h2>404 — Page Not Found</h2></div>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   );
 }
+
+export default App;
 ```
  
 ---
