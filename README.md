@@ -417,12 +417,12 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        // Pehle check karo — user pehle se hai?
+      
         let user = await User.findOne({ googleId: profile.id });
 
         if (user) return done(null, user);
 
-        // Email se bhi check karo (agar pehle email se register kiya ho)
+        
         user = await User.findOne({ email: profile.emails[0].value });
 
         if (user) {
@@ -433,7 +433,7 @@ passport.use(
           return done(null, user);
         }
 
-        // Bilkul naya user — create karo
+        
         user = await User.create({
           name:     profile.displayName,
           email:    profile.emails[0].value,
@@ -473,173 +473,119 @@ touch backend/routes/auth.js
 ```javascript
 // backend/routes/auth.js
  
-const express    = require('express');
-const passport   = require('passport');
-const jwt        = require('jsonwebtoken');
-const router     = express.Router();
- 
-// ─── Helper: Generate Tokens ──────────────────────────────────
-const generateAccessToken = (user) => {
-  return jwt.sign(
-    { id: user._id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE || '15m' }
-  );
-};
- 
-const generateRefreshToken = (user) => {
-  return jwt.sign(
-    { id: user._id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' }
-  );
-};
- 
-const sendTokenCookies = (res, accessToken, refreshToken) => {
-  const isProduction = process.env.NODE_ENV === 'production';
- 
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    secure:   isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
-    maxAge:   15 * 60 * 1000, // 15 minutes
+const express  = require('express');
+const jwt      = require('jsonwebtoken');
+const passport = require('passport');
+const User     = require('../models/User');
+const { protect } = require('../middleware/auth.middleware');
+
+const router = express.Router();
+
+// ── Helper: JWT Cookie Set ────────────────────────────────────
+const sendToken = (res, user, statusCode = 200) => {
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || '7d',
   });
- 
-  res.cookie('refreshToken', refreshToken, {
+
+  res.cookie('token', token, {
     httpOnly: true,
-    secure:   isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
-    maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days
-    path:     '/auth/refresh', // Only sent to refresh endpoint
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    maxAge:   7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.status(statusCode).json({
+    success: true,
+    user: {
+      id:     user._id,
+      name:   user.name,
+      email:  user.email,
+      avatar: user.avatar,
+      role:   user.role,
+    },
   });
 };
- 
-// ─── Route 1: Start Google OAuth ─────────────────────────────
-// GET /auth/google
-// User lands here when they click "Sign in with Google"
-router.get(
-  '/google',
-  passport.authenticate('google', {
-    scope: ['profile', 'email'],
-    prompt: 'select_account', // Always show account picker
-  })
+
+// ── POST /api/auth/register ───────────────────────────────────
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({ success: false, message: 'Email already registered' });
+    }
+
+    const user = await User.create({ name, email, password });
+    sendToken(res, user, 201);
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ── POST /api/auth/login ──────────────────────────────────────
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password required' });
+    }
+
+    // password field select karo (model mein select: false hai)
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user || !user.password) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    sendToken(res, user);
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ── GET /api/auth/google ──────────────────────────────────────
+router.get('/google',
+  passport.authenticate('google', { scope: ['profile', 'email'], prompt: 'select_account' })
 );
- 
-// ─── Route 2: Google Callback ────────────────────────────────
-// GET /auth/google/callback
-// Google redirects here after user approves
-router.get(
-  '/google/callback',
-  passport.authenticate('google', {
-    failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed`,
-    session: false,
-  }),
+
+// ── GET /api/auth/google/callback ────────────────────────────
+router.get('/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=google_failed` }),
   (req, res) => {
-    try {
-      const user = req.user;
- 
-      // Generate tokens
-      const accessToken  = generateAccessToken(user);
-      const refreshToken = generateRefreshToken(user);
- 
-      // Set tokens as httpOnly cookies
-      sendTokenCookies(res, accessToken, refreshToken);
- 
-      // Redirect to frontend dashboard
-      res.redirect(`${process.env.CLIENT_URL}/dashboard`);
- 
-    } catch (error) {
-      console.error('Callback Error:', error);
-      res.redirect(`${process.env.CLIENT_URL}/login?error=server_error`);
-    }
+    sendToken(res, req.user);
+    res.redirect(`${process.env.CLIENT_URL}/`);
   }
 );
- 
-// ─── Route 3: Get Current User ───────────────────────────────
-// GET /auth/me
-// Frontend calls this to check if user is logged in
-router.get('/me', requireAuth, async (req, res) => {
-  try {
-    const User = require('../models/User');
-    const user = await User.findById(req.user.id).select('-refreshToken');
- 
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
- 
-    res.json({ success: true, user: user.toSafeObject() });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
+
+// ── GET /api/auth/me ──────────────────────────────────────────
+router.get('/me', protect, (req, res) => {
+  res.json({ success: true, user: req.user });
 });
- 
-// ─── Route 4: Refresh Access Token ──────────────────────────
-// POST /auth/refresh
-router.post('/refresh', (req, res) => {
-  const token = req.cookies.refreshToken;
- 
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'No refresh token' });
-  }
- 
-  try {
-    const payload      = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    const User         = require('../models/User');
-    
-    User.findById(payload.id).then((user) => {
-      if (!user || !user.isActive) {
-        return res.status(401).json({ success: false, error: 'User not found' });
-      }
- 
-      const newAccessToken = generateAccessToken(user);
-      const isProduction   = process.env.NODE_ENV === 'production';
- 
-      res.cookie('accessToken', newAccessToken, {
-        httpOnly: true,
-        secure:   isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
-        maxAge:   15 * 60 * 1000,
-      });
- 
-      res.json({ success: true, message: 'Token refreshed' });
-    });
- 
-  } catch (error) {
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
-    res.status(401).json({ success: false, error: 'Invalid refresh token' });
-  }
-});
- 
-// ─── Route 5: Logout ────────────────────────────────────────
-// POST /auth/logout
+
+// ── POST /api/auth/logout ─────────────────────────────────────
 router.post('/logout', (req, res) => {
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken', { path: '/auth/refresh' });
-  res.json({ success: true, message: 'Logged out successfully' });
+  res.clearCookie('token');
+  res.json({ success: true, message: 'Logged out' });
 });
- 
-// ─── Middleware: Require Authentication ──────────────────────
-function requireAuth(req, res, next) {
-  const token = req.cookies?.accessToken
-    || req.headers.authorization?.split(' ')[1];
- 
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Not authenticated' });
-  }
- 
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, error: 'Token expired' });
-    }
-    res.status(401).json({ success: false, error: 'Invalid token' });
-  }
-}
- 
-module.exports = { router, requireAuth };
+
+module.exports = router;
 ```
  
 ---
