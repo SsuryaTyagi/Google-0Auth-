@@ -235,7 +235,7 @@ Client Secret:  GOCSPX-xxxxxxxxxxxxxxxxxx
 ```bash
 cd backend
 npm init -y
-npm install express passport passport-google-oauth20 express-session mongoose dotenv cors jsonwebtoken cookie-parser express-rate-limit
+npm install express passport passport-google-oauth20 express-session mongoose dotenv cors jsonwebtoken cookie-parser express-rate-limi
 npm install --save-dev nodemon
 ```
  
@@ -286,10 +286,8 @@ GOOGLE_CLIENT_SECRET=GOCSPX-your_secret_here
 SESSION_SECRET=use_a_very_long_random_string_here_minimum_32_chars
  
 # ─── JWT ─────────────────────────────────────────
-JWT_SECRET=another_very_long_random_string_for_jwt
-JWT_REFRESH_SECRET=yet_another_long_string_for_refresh_tokens
-JWT_EXPIRE=15m
-JWT_REFRESH_EXPIRE=30d
+JWT_SECRET=any_long_random_string_min_32_chars
+JWT_EXPIRE=7d
  
 # ─── Database ────────────────────────────────────
 MONGO_URI=mongodb://localhost:27017/myapp_oauth
