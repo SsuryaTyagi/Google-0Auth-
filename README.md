@@ -597,105 +597,51 @@ module.exports = router;
  
 require('dotenv').config();
  
+require('dotenv').config();
+
 const express      = require('express');
-const session      = require('express-session');
-const passport     = require('passport');
 const mongoose     = require('mongoose');
 const cors         = require('cors');
 const cookieParser = require('cookie-parser');
-const rateLimit    = require('express-rate-limit');
- 
-// Load passport configuration
+const session      = require('express-session');
+const passport     = require('passport');
+
 require('./config/passport');
- 
-// Import routes
-const { router: authRouter } = require('./routes/auth');
- 
+
+const authRoutes = require('./routes/auth');
+
 const app = express();
- 
-// ─── Security: Rate Limiting ─────────────────────────────────
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max:      20,              // max 20 auth requests per window
-  message:  { error: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders:   false,
-});
- 
-// ─── Middleware ───────────────────────────────────────────────
-app.use(cors({
-  origin:      process.env.CLIENT_URL,   // Only allow your React app
-  credentials: true,                     // Allow cookies
-  methods:     ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
- 
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true }));
+
+// ── Middleware ────────────────────────────────────────────────
+app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use(express.json());
 app.use(cookieParser());
- 
-// Session (needed by Passport)
 app.use(session({
   secret:            process.env.SESSION_SECRET,
   resave:            false,
   saveUninitialized: false,
-  cookie: {
-    secure:   process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge:   24 * 60 * 60 * 1000, // 1 day
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  },
 }));
- 
-// Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
- 
-// ─── Routes ───────────────────────────────────────────────────
-app.use('/auth', authLimiter, authRouter);
- 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
- 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
- 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Global Error:', err.stack);
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message,
-  });
-});
- 
-// ─── Connect DB & Start Server ────────────────────────────────
-const startServer = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser:    true,
-      useUnifiedTopology: true,
-    });
-    console.log('✅ MongoDB connected successfully');
- 
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`✅ Auth URL: http://localhost:${PORT}/auth/google`);
-    });
- 
-  } catch (error) {
-    console.error('❌ Failed to connect to MongoDB:', error.message);
+
+// ── Routes ────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+
+app.get('/', (req, res) => res.json({ message: 'Auth API is running ✅' }));
+
+// ── Start ─────────────────────────────────────────────────────
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('✅ MongoDB connected');
+    app.listen(process.env.PORT || 5000, () =>
+      console.log(`✅ Server running on http://localhost:${process.env.PORT || 5000}`)
+    );
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB error:', err.message);
     process.exit(1);
-  }
-};
- 
-startServer();
+  });
 ```
  
 Add to `backend/package.json`:
