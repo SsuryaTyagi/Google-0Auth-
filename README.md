@@ -334,78 +334,61 @@ touch backend/models/User.js
 // backend/models/User.js
  
 const mongoose = require('mongoose');
- 
+const bcrypt   = require('bcryptjs');
+
 const UserSchema = new mongoose.Schema(
   {
-    googleId: {
-      type: String,
+    name: {
+      type:     String,
       required: true,
-      unique: true,
-      index: true,
-    },
-    displayName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    firstName: {
-      type: String,
-      trim: true,
-    },
-    lastName: {
-      type: String,
-      trim: true,
+      trim:     true,
     },
     email: {
-      type: String,
-      required: true,
-      unique: true,
+      type:      String,
+      required:  true,
+      unique:    true,
       lowercase: true,
-      trim: true,
+      trim:      true,
+    },
+    password: {
+      type:   String,
+      select: false, 
+    },
+    googleId: {
+      type: String,
     },
     avatar: {
-      type: String,   // Google profile picture URL
+      type: String,
     },
     role: {
-      type: String,
-      enum: ['user', 'admin', 'moderator'],
+      type:    String,
+      enum:    ['user', 'admin'],
       default: 'user',
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    lastLogin: {
-      type: Date,
-      default: Date.now,
-    },
-    refreshToken: {
-      type: String,   // Store hashed refresh token
-      select: false,  // Never return in queries by default
-    },
+
+    // ── Extensible Fields (Uncomment to use) ─────────────────
+    // phone:   { type: String },
+    // address: { type: String },
+    // city:    { type: String },
+    // pincode: { type: String },
+    // ─────────────────────────────────────────────────────────
   },
-  {
-    timestamps: true, // Adds createdAt and updatedAt automatically
-  }
+  { timestamps: true }
 );
- 
-// Virtual: full name
-UserSchema.virtual('fullName').get(function () {
-  return `${this.firstName} ${this.lastName}`.trim();
+
+// Password save karne se pehle hash karo
+UserSchema.pre('save', async function (next) {
+  // Sirf tab hash karo jab password naya/changed ho
+  if (!this.isModified('password') || !this.password) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
 });
- 
-// Method: return safe user object (no sensitive fields)
-UserSchema.methods.toSafeObject = function () {
-  return {
-    id: this._id,
-    displayName: this.displayName,
-    email: this.email,
-    avatar: this.avatar,
-    role: this.role,
-    createdAt: this.createdAt,
-  };
+
+// Password check karne ka method
+UserSchema.methods.matchPassword = async function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
 };
- 
+
 module.exports = mongoose.model('User', UserSchema);
 ```
  
