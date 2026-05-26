@@ -706,37 +706,16 @@ Add to `backend/package.json`:
 // frontend/src/components/GoogleLoginButton.jsx
  
 import React from 'react';
- 
-export default function GoogleLoginButton({ text = 'Sign in with Google' }) {
-  const handleGoogleLogin = () => {
-    // Redirect the browser to the backend OAuth route
-    window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`;
-  };
- 
+import { googleLoginURL } from '../services/auth.api';
+
+function GoogleLoginButton({ text = 'Continue with Google' }) {
   return (
     <button
-      onClick={handleGoogleLogin}
-      style={{
-        display:        'flex',
-        alignItems:     'center',
-        justifyContent: 'center',
-        gap:            '12px',
-        padding:        '12px 24px',
-        background:     '#ffffff',
-        color:          '#1f1f1f',
-        border:         '1px solid #dadce0',
-        borderRadius:   '8px',
-        fontSize:       '16px',
-        fontWeight:     '500',
-        cursor:         'pointer',
-        transition:     'box-shadow 0.2s ease',
-        minWidth:       '240px',
-      }}
-      onMouseEnter={(e) => e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)'}
-      onMouseLeave={(e) => e.target.style.boxShadow = 'none'}
+      type="button"
+      className="btn-google"
+      onClick={() => (window.location.href = googleLoginURL)}
     >
-      {/* Official Google icon SVG */}
-      <svg width="20" height="20" viewBox="0 0 48 48">
+      <svg className="google-icon" viewBox="0 0 48 48">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
         <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
         <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
@@ -746,6 +725,8 @@ export default function GoogleLoginButton({ text = 'Sign in with Google' }) {
     </button>
   );
 }
+
+export default GoogleLoginButton;
 ```
  
 Create `frontend/src/pages/Login.jsx`:
@@ -753,48 +734,97 @@ Create `frontend/src/pages/Login.jsx`:
 ```jsx
 // frontend/src/pages/Login.jsx
  
-import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import GoogleLoginButton from '../components/GoogleLoginButton';
- 
-export default function Login() {
-  const { user }           = useAuth();
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import Input             from '../component/Input';
+import Button            from '../component/Button';
+import GoogleLoginButton from '../component/GoogleLoginButton';
+import { useAuth }       from '../auth.context';
+import { loginAPI }      from '../services/auth.api';
+import '../Style/Style.css';
+
+function LoginPage() {
+  const { user, setUser }  = useAuth();
   const navigate           = useNavigate();
   const [searchParams]     = useSearchParams();
-  const error              = searchParams.get('error');
- 
-  // If already logged in, redirect to dashboard
+  const errorParam         = searchParams.get('error');
+
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [error,    setError]    = useState(
+    errorParam === 'google_failed' ? 'Google login failed. Please try again.' : ''
+  );
+  const [loading, setLoading] = useState(false);
+
+  // Already logged in? seedha home par
   useEffect(() => {
-    if (user) navigate('/dashboard');
+    if (user) navigate('/');
   }, [user, navigate]);
- 
-  const errorMessages = {
-    auth_failed:  'Google login failed. Please try again.',
-    server_error: 'Something went wrong on our end. Please try again.',
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const res = await loginAPI({ email, password });
+    setLoading(false);
+
+    if (res.success) {
+      setUser(res.user);
+      navigate('/');
+    } else {
+      setError(res.message || 'Login failed. Please check your credentials.');
+    }
   };
- 
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fa' }}>
-      <div style={{ background: 'white', padding: '48px 40px', borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', textAlign: 'center', maxWidth: '400px', width: '100%' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: '700', margin: '0 0 8px' }}>Welcome Back</h1>
-        <p style={{ color: '#666', margin: '0 0 32px' }}>Sign in to your account to continue</p>
- 
-        {error && (
-          <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '12px 16px', borderRadius: '8px', marginBottom: '24px', fontSize: '14px' }}>
-            ⚠️ {errorMessages[error] || 'An error occurred. Please try again.'}
-          </div>
-        )}
- 
-        <GoogleLoginButton />
- 
-        <p style={{ marginTop: '24px', fontSize: '12px', color: '#999' }}>
-          By signing in, you agree to our Terms of Service and Privacy Policy.
+    <div className="auth-page">
+      <div className="auth-card">
+
+        <div className="auth-header">
+          <div className="auth-logo">🔐</div>
+          <h1 className="auth-title">Welcome back</h1>
+          <p className="auth-subtitle">Sign in to your account</p>
+        </div>
+
+        {error && <div className="auth-error">⚠️ {error}</div>}
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            placeholder="you@example.com"
+            required
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            placeholder="••••••••"
+            required
+          />
+          <Button loading={loading}>Sign In</Button>
+        </form>
+
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+
+        <GoogleLoginButton text="Sign in with Google" />
+
+        <p className="auth-switch">
+          Don't have an account? <Link to="/register">Create one</Link>
         </p>
+
       </div>
     </div>
   );
 }
+
+export default LoginPage;
 ```
  
 ---
@@ -923,39 +953,35 @@ export const useAuth = () => {
  
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
- 
-export default function ProtectedRoute({
-  children,
-  requiredRole = null,   // Optional: 'admin', 'moderator', etc.
-}) {
+import { useAuth } from '../auth.context';
+
+// Wrap any route that needs login:
+// <Route path="/home" element={<Protected><HomePage /></Protected>} />
+function Protected({ children, requiredRole = null }) {
   const { user, loading, isAuthenticated } = useAuth();
   const location = useLocation();
- 
-  // Show loading spinner while checking auth
+
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '32px', marginBottom: '16px' }}>⏳</div>
-          <p>Checking authentication...</p>
-        </div>
+      <div className="auth-loading">
+        <div className="spinner" />
       </div>
     );
   }
- 
-  // Not logged in → redirect to login, remember where they came from
+
   if (!isAuthenticated) {
+    // Login ke baad wapas isi page par aaye — state mein save karo
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
- 
-  // Logged in but wrong role
+
   if (requiredRole && user.role !== requiredRole) {
     return <Navigate to="/unauthorized" replace />;
   }
- 
+
   return children;
 }
+
+export default Protected;
 ```
  
 ---
