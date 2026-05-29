@@ -404,7 +404,7 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Password save karne se pehle hash karo
+//hash password befor save db
 UserSchema.pre('save', async function (next) {
   // Sirf tab hash karo jab password naya/changed ho
   if (!this.isModified('password') || !this.password) return next();
@@ -412,7 +412,7 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
-// Password check karne ka method
+// Password check method
 UserSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
@@ -441,7 +441,7 @@ passport.use(
     {
       clientID:     process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL:  '/api/auth/google/callback',
+      callbackURL:  'Your_backend_url/api/auth/google/callback',
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -454,7 +454,6 @@ passport.use(
         user = await User.findOne({ email: profile.emails[0].value });
 
         if (user) {
-          // Same email hai — Google ID link kar do
           user.googleId = profile.id;
           if (!user.avatar) user.avatar = profile.photos[0]?.value;
           await user.save();
@@ -666,8 +665,6 @@ module.exports = router;
 // backend/server.js
  
 require('dotenv').config();
- 
-require('dotenv').config();
 
 const express      = require('express');
 const mongoose     = require('mongoose');
@@ -676,7 +673,7 @@ const cookieParser = require('cookie-parser');
 const session      = require('express-session');
 const passport     = require('passport');
 
-require('./config/passport');
+require('./config/passport');  //Is important 
 
 const authRoutes = require('./routes/auth');
 
@@ -851,7 +848,7 @@ function LoginPage() {
   );
   const [loading, setLoading] = useState(false);
 
-  // Already logged in? seedha home par
+  // Already logged in?  direct home page
   useEffect(() => {
     if (user) navigate('/');
   }, [user, navigate]);
@@ -1014,7 +1011,6 @@ function RegisterPage() {
           />
 
           {/*
-            ── Extensible: Aage Phone/Address Add Karna Ho Toh ──
             <Input label="Phone"   type="tel"  value={phone}   onChange={setPhone}   />
             <Input label="Address" type="text" value={address} onChange={setAddress} />
             ────────────────────────────────────────────────────
